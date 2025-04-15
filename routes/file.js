@@ -1,0 +1,197 @@
+const express = require('express')
+const multer = require('multer')
+const fs = require('fs')
+const path = require('path')
+const csv = require('csv-parser')
+
+const router = express.Router()
+
+//storing image file
+var storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, 'uploads')      //you tell where to upload the files,
+    },
+    filename: function (req, file, cb) {
+      cb(null, file.fieldname + '-' + Date.now() + '.png')
+    }
+})
+
+//image filter, accepts only jpeg and png
+const fileFilter = (req, file, cb) => {
+    if (file.minetype === '' || file.minetype === 'image/png' || file.minetype === 'image/jpg') {
+        cb(null, true)
+    } else {
+        cb(null, false)
+    }
+}
+
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 1024 * 1024 * 5
+    }
+})
+
+// GET route to read all rows from classlist.csv
+router.get('/classlist', (req, res) => {
+    const filePath = path.join(__dirname, '../files/classlist.csv')
+    const results = []
+
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => results.push(data))
+        .on('end', () => {
+            res.status(200).json(results)
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message })
+        })
+})
+
+
+
+// GET route to read all rows from attendance.csv
+router.get('/v1', (req, res) => {
+    const filePath = path.join(__dirname, '../files/attendance.csv')
+    const results = []
+
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => results.push(data))
+        .on('end', () => {
+            res.status(200).json(results)
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message })
+        })
+})
+
+
+// POST route to add a new record to attendance.csv
+router.post('/v1', (req, res) => {
+    const filePath = path.join(__dirname, '../files/attendance.csv');
+    const { studentname, checkin, checkout } = req.body;
+
+    console.log(req.body)
+
+    if (!studentname) {
+        return res.status(400).json({ error: 'All fields (studentname, checkin, checkout) are required' });
+    }
+
+    // Ensure the file exists before appending
+    fs.access(filePath, fs.constants.F_OK, (err) => {
+        if (err) {
+            // If the file does not exist, create it with a header row
+            const header = 'studentname,checkin,checkout\n';
+            fs.writeFile(filePath, header, (writeErr) => {
+                if (writeErr) {
+                    return res.status(500).json({ error: 'Failed to create the file', details: writeErr.message });
+                }
+                appendRecord();
+            });
+        } else {
+            appendRecord();
+        }
+    });
+
+    // Function to append the new record
+    function appendRecord() {
+        const newRecord = `${studentname},${checkin},${checkout}\n`;
+
+        fs.appendFile(filePath, newRecord, (err) => {
+            if (err) {
+                return res.status(500).json({ error: 'Failed to write to the file', details: err.message });
+            }
+            res.status(201).json({ message: 'Record added successfully' });
+        });
+    }
+});
+
+
+// PUT route to update the check-in time of a record by student name
+router.put('/v1/checkin', (req, res) => {
+    const filePath = path.join(__dirname, '../files/attendance.csv')
+    const { studentname, checkin } = req.body
+
+    if (!studentname || !checkin) {
+        return res.status(400).json({ error: 'Both studentname and newCheckin are required' })
+    }
+
+    const results = []
+
+    // Read the file and update the record
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => {
+            if (data.name === studentname) {
+                data.checkin = checkin // Update the check-in time
+            }
+            results.push(data)
+        })
+        .on('end', () => {
+            // Add the header row
+            const header = 'name,checkin,checkout\n';
+
+            // Convert updated data back to CSV format
+            const updatedCsv =
+            header + results.map(row => `${row.name},${row.checkin},${row.checkout}`).join('\n');
+
+            // Overwrite the file with updated data
+            fs.writeFile(filePath, updatedCsv, (err) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to update the file', details: err.message })
+                }
+                res.status(200).json({ message: 'Check-in time updated successfully' })
+            })
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message })
+        })
+})
+
+
+
+// PUT route to update the checkout time of a record by student name
+router.put('/v1/checkout', (req, res) => {
+    const filePath = path.join(__dirname, '../files/attendance.csv')
+    const { studentname, checkout } = req.body
+
+    if (!studentname || !checkout) {
+        return res.status(400).json({ error: 'Both studentname and newCheckout are required' })
+    }
+
+    const results = []
+
+    // Read the file and update the record
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => {
+            if (data.name === studentname) {
+                data.checkout = checkout // Update the checkout time
+            }
+            results.push(data)
+        })
+        .on('end', () => {
+            // Add the header row
+            const header = 'name,checkin,checkout\n';
+
+            // Convert updated data back to CSV format
+            const updatedCsv =
+            header + results.map(row => `${row.name},${row.checkin},${row.checkout}`).join('\n');
+ 
+
+            // Overwrite the file with updated data
+            fs.writeFile(filePath, updatedCsv, (err) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to update the file', details: err.message })
+                }
+                res.status(200).json({ message: 'Checkout time updated successfully' })
+            })
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message })
+        })
+})
+
+
+module.exports = router
