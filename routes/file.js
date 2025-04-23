@@ -49,6 +49,126 @@ router.get('/classlist', (req, res) => {
 })
 
 
+// PUT route to add a new name to classlist.csv
+router.put('/classlist', (req, res) => {
+    const filePath = path.join(__dirname, '../files/classlist.csv');
+    const { name } = req.body;
+
+    if (!name) {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const results = [];
+
+    // Read the file to check if the name already exists
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => {
+            results.push(data);
+        })
+        .on('end', () => {
+            const nameExists = results.some(entry => entry.name === name);
+
+            if (nameExists) {
+                return res.status(400).json({ error: 'Name already exists in the class list' });
+            }
+
+            // Append the new name to the file
+            const newRecord = `${name}\n`;
+
+            fs.appendFile(filePath, newRecord, (err) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to write to the file', details: err.message });
+                }
+                res.status(201).json({ message: 'Name added successfully' });
+            });
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message });
+        });
+});
+
+
+// DELETE route to remove a name from classlist.csv
+router.delete('/classlist', (req, res) => {
+    const filePath = path.join(__dirname, '../files/classlist.csv');
+    const { name } = req.body;
+
+    if (!name) {
+        return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const results = [];
+
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => {
+            if (data.name !== name) {
+                results.push(data);
+            }
+        })
+        .on('end', () => {
+            const header = 'name\n';
+            const updatedCsv = header + results.map(row => row.name).join('\n');
+
+            fs.writeFile(filePath, updatedCsv, (err) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to update the file', details: err.message });
+                }
+                res.status(200).json({ message: 'User deleted successfully' });
+            });
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message });
+        });
+});
+
+
+
+// PUT route to update a user's name in classlist.csv
+router.patch('/classlist', (req, res) => {
+    const filePath = path.join(__dirname, '../files/classlist.csv');
+    const { oldName, newName } = req.body;
+
+    console.log(req.body)
+
+    if (!oldName || !newName) {
+        return res.status(400).json({ error: 'Both oldName and newName are required' });
+    }
+
+    const results = [];
+
+    // Read the file and update the user's name
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => {
+            if (data.name === oldName) {
+                data.name = newName; // Update the name
+            }
+            results.push(data);
+        })
+        .on('end', () => {
+            // Add the header row
+            const header = 'name\n';
+
+            // Convert updated data back to CSV format
+            const updatedCsv = header + results.map(row => row.name).join('\n');
+
+            // Overwrite the file with updated data
+            fs.writeFile(filePath, updatedCsv, (err) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Failed to update the file', details: err.message });
+                }
+                res.status(200).json({ message: 'User name updated successfully' });
+            });
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message });
+        });
+});
+
+
+
 
 // GET route to read all rows from attendance.csv
 router.get('/v1', (req, res) => {
