@@ -70,7 +70,7 @@ router.get('/v1', (req, res) => {
 // POST route to add a new record to attendance.csv
 router.post('/v1', (req, res) => {
     const filePath = path.join(__dirname, '../files/attendance.csv');
-    const { studentname, checkin, checkout } = req.body;
+    const { studentname, option } = req.body;
 
     console.log(req.body)
 
@@ -87,15 +87,20 @@ router.post('/v1', (req, res) => {
                 if (writeErr) {
                     return res.status(500).json({ error: 'Failed to create the file', details: writeErr.message });
                 }
-                appendRecord();
+                appendRecord(option);
             });
         } else {
-            appendRecord();
+            appendRecord(option);
         }
     });
 
     // Function to append the new record
-    function appendRecord() {
+    function appendRecord(option) {
+        const currentTime = new Date().toLocaleTimeString(); // Get the current server time
+
+        let checkin = option === 'checkin' ? currentTime : 'N/A'
+        let checkout = option === 'checkout' ? currentTime : 'N/A'
+
         const newRecord = `${studentname},${checkin},${checkout}\n`;
 
         fs.appendFile(filePath, newRecord, (err) => {
@@ -111,12 +116,13 @@ router.post('/v1', (req, res) => {
 // PUT route to update the check-in time of a record by student name
 router.put('/v1/checkin', (req, res) => {
     const filePath = path.join(__dirname, '../files/attendance.csv')
-    const { studentname, checkin } = req.body
+    const { studentname } = req.body
 
-    if (!studentname || !checkin) {
+    if (!studentname) {
         return res.status(400).json({ error: 'Both studentname and newCheckin are required' })
     }
 
+    const checkin = new Date().toLocaleTimeString(); // Get the current server time
     const results = []
 
     // Read the file and update the record
@@ -154,12 +160,13 @@ router.put('/v1/checkin', (req, res) => {
 // PUT route to update the checkout time of a record by student name
 router.put('/v1/checkout', (req, res) => {
     const filePath = path.join(__dirname, '../files/attendance.csv')
-    const { studentname, checkout } = req.body
+    const { studentname } = req.body
 
-    if (!studentname || !checkout) {
+    if (!studentname) {
         return res.status(400).json({ error: 'Both studentname and newCheckout are required' })
     }
 
+    const checkout = new Date().toLocaleTimeString(); // Get the current server time
     const results = []
 
     // Read the file and update the record
