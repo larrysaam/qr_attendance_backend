@@ -178,6 +178,7 @@ router.get('/v1/:fileName', (req, res) => {
 
     
     if (!fs.existsSync(filePath)) {
+        console.log('File not found:', filePath)
         return res.status(404).send('File not found');
     }
 
