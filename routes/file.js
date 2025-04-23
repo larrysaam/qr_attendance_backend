@@ -171,9 +171,15 @@ router.patch('/classlist', (req, res) => {
 
 
 // GET route to read all rows from attendance.csv
-router.get('/v1', (req, res) => {
-    const filePath = path.join(__dirname, '../files/attendance.csv')
+router.get('/v1/:fileName', (req, res) => {
+    console.log(req.params.fileName)
+    const filePath = path.join(__dirname, '../files/', req.params.fileName);
     const results = []
+
+    
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).send('File not found');
+    }
 
     fs.createReadStream(filePath)
         .pipe(csv())
