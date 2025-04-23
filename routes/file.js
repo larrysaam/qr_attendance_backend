@@ -194,6 +194,31 @@ router.get('/v1/:fileName', (req, res) => {
 })
 
 
+// GET route to read today's attendance from attendance.csv
+router.get('/v2/today', (req, res) => {
+    const date = new Date();
+    const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    console.log('Formatted Date:', formattedDate);
+    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
+    const results = [];
+
+    if (!fs.existsSync(filePath)) {
+        console.log('File not found:', filePath);
+        return res.status(404).send('File not found');
+    }
+
+    fs.createReadStream(filePath)
+        .pipe(csv())
+        .on('data', (data) => results.push(data))
+        .on('end', () => {
+            res.status(200).json(results);
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to read the file', details: err.message });
+        });
+});
+
+
 // POST route to add a new record to attendance.csv
 router.post('/v1', (req, res) => {
     const filePath = path.join(__dirname, '../files/attendance.csv');
