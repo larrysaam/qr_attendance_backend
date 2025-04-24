@@ -218,16 +218,15 @@ router.get('/v2/today', (req, res) => {
         });
 });
 
-
 // POST route to add a new record to attendance.csv
 router.post('/v1', (req, res) => {
-    const filePath = path.join(__dirname, '../files/attendance.csv');
+    const date = new Date();
+    const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
     const { studentname, option } = req.body;
 
-    console.log(req.body)
-
-    if (!studentname) {
-        return res.status(400).json({ error: 'All fields (studentname, checkin, checkout) are required' });
+    if (!studentname || !option) {
+        return res.status(400).json({ error: 'Both studentname and option (checkin/checkout) are required' });
     }
 
     // Ensure the file exists before appending
@@ -239,22 +238,25 @@ router.post('/v1', (req, res) => {
                 if (writeErr) {
                     return res.status(500).json({ error: 'Failed to create the file', details: writeErr.message });
                 }
-                appendRecord(option);
+                appendRecord(); // Append the record after creating the file
             });
         } else {
-            appendRecord(option);
+            appendRecord(); // Append the record if the file already exists
         }
     });
 
     // Function to append the new record
-    function appendRecord(option) {
+    function appendRecord() {
         const currentTime = new Date().toLocaleTimeString(); // Get the current server time
 
-        let checkin = option === 'checkin' ? currentTime : 'N/A'
-        let checkout = option === 'checkout' ? currentTime : 'N/A'
+        // Determine check-in or check-out based on the option
+        const checkin = option === 'checkin' ? currentTime : 'N/A';
+        const checkout = option === 'checkout' ? currentTime : 'N/A';
 
+        // Create the new record
         const newRecord = `${studentname},${checkin},${checkout}\n`;
 
+        // Append the record to the file
         fs.appendFile(filePath, newRecord, (err) => {
             if (err) {
                 return res.status(500).json({ error: 'Failed to write to the file', details: err.message });
@@ -267,7 +269,10 @@ router.post('/v1', (req, res) => {
 
 // PUT route to update the check-in time of a record by student name
 router.put('/v1/checkin', (req, res) => {
-    const filePath = path.join(__dirname, '../files/attendance.csv')
+    const date = new Date();
+    const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    console.log('Formatted Date:', formattedDate);
+    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
     const { studentname } = req.body
 
     if (!studentname) {
@@ -311,7 +316,10 @@ router.put('/v1/checkin', (req, res) => {
 
 // PUT route to update the checkout time of a record by student name
 router.put('/v1/checkout', (req, res) => {
-    const filePath = path.join(__dirname, '../files/attendance.csv')
+    const date = new Date();
+    const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    console.log('Formatted Date:', formattedDate);
+    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
     const { studentname } = req.body
 
     if (!studentname) {
