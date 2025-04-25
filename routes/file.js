@@ -62,7 +62,7 @@ router.put('/classlist', async (req, res) => {
         }
 
         // Add the new name to the collection
-        const newEmployee = new Employee({ name });
+        const newEmployee = new Employee({_id: new mongoose.Types.ObjectId(), name });
         await newEmployee.save();
 
         res.status(201).json({ message: 'Name added successfully', employee: newEmployee });
@@ -188,6 +188,7 @@ router.post('/v1', async (req, res) => {
 
         // Create a new attendance record
         const newAttendance = new Attendance({
+            _id: new mongoose.Types.ObjectId(),
             name: studentname,
             checkin,
             checkout,
