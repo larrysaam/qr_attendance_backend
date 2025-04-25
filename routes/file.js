@@ -3,6 +3,8 @@ const multer = require('multer')
 const fs = require('fs')
 const path = require('path')
 const csv = require('csv-parser')
+const Employee = require('../model/employeeListModel'); // Import the Employee model
+const Attendance = require('../model/attendanceModel');
 
 const router = express.Router()
 
@@ -32,333 +34,239 @@ const upload = multer({
     }
 })
 
-// GET route to read all rows from classlist.csv
-router.get('/classlist', (req, res) => {
-    const filePath = path.join(__dirname, '../files/classlist.csv')
-    const results = []
-
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => results.push(data))
-        .on('end', () => {
-            res.status(200).json(results)
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message })
-        })
-})
+// GET route to read all rows from the employeeList collection in MongoDB
+router.get('/classlist', async (req, res) => {
+    try {
+        const employees = await Employee.find(); // Fetch all employee records from MongoDB
+        res.status(200).json(employees); // Send the records as a JSON response
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch employee list', details: err.message });
+    }
+});
 
 
-// PUT route to add a new name to classlist.csv
-router.put('/classlist', (req, res) => {
-    const filePath = path.join(__dirname, '../files/classlist.csv');
+
+// PUT route to add a new name to the employeeList collection in MongoDB
+router.put('/classlist', async (req, res) => {
     const { name } = req.body;
 
     if (!name) {
         return res.status(400).json({ error: 'Name is required' });
     }
 
-    const results = [];
+    try {
+        // Check if the name already exists in the collection
+        const existingEmployee = await Employee.findOne({ name });
+        if (existingEmployee) {
+            return res.status(400).json({ error: 'Name already exists in the employee list' });
+        }
 
-    // Read the file to check if the name already exists
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => {
-            results.push(data);
-        })
-        .on('end', () => {
-            const nameExists = results.some(entry => entry.name === name);
+        // Add the new name to the collection
+        const newEmployee = new Employee({ name });
+        await newEmployee.save();
 
-            if (nameExists) {
-                return res.status(400).json({ error: 'Name already exists in the class list' });
-            }
-
-            // Append the new name to the file
-            const newRecord = `${name}\n`;
-
-            fs.appendFile(filePath, newRecord, (err) => {
-                if (err) {
-                    return res.status(500).json({ error: 'Failed to write to the file', details: err.message });
-                }
-                res.status(201).json({ message: 'Name added successfully' });
-            });
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message });
-        });
+        res.status(201).json({ message: 'Name added successfully', employee: newEmployee });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to add name to the employee list', details: err.message });
+    }
 });
 
 
-// DELETE route to remove a name from classlist.csv
-router.delete('/classlist', (req, res) => {
-    const filePath = path.join(__dirname, '../files/classlist.csv');
+// DELETE route to remove a name from the employeeList collection in MongoDB
+router.delete('/classlist', async (req, res) => {
     const { name } = req.body;
 
     if (!name) {
         return res.status(400).json({ error: 'Name is required' });
     }
 
-    const results = [];
+    try {
+        // Find and delete the employee by name
+        const deletedEmployee = await Employee.findOneAndDelete({ name });
 
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => {
-            if (data.name !== name) {
-                results.push(data);
-            }
-        })
-        .on('end', () => {
-            const header = 'name\n';
-            const updatedCsv = header + results.map(row => row.name).join('\n');
+        if (!deletedEmployee) {
+            return res.status(404).json({ error: 'Employee not found in the employee list' });
+        }
 
-            fs.writeFile(filePath, updatedCsv, (err) => {
-                if (err) {
-                    return res.status(500).json({ error: 'Failed to update the file', details: err.message });
-                }
-                res.status(200).json({ message: 'User deleted successfully' });
-            });
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message });
-        });
+        res.status(200).json({ message: 'Employee deleted successfully', employee: deletedEmployee });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete employee from the employee list', details: err.message });
+    }
 });
 
 
 
-// PUT route to update a user's name in classlist.csv
-router.patch('/classlist', (req, res) => {
-    const filePath = path.join(__dirname, '../files/classlist.csv');
+// PATCH route to update an employee's name in the employeeList collection in MongoDB
+router.patch('/classlist', async (req, res) => {
     const { oldName, newName } = req.body;
-
-    console.log(req.body)
 
     if (!oldName || !newName) {
         return res.status(400).json({ error: 'Both oldName and newName are required' });
     }
 
-    const results = [];
+    try {
+        // Find the employee by oldName and update the name to newName
+        const updatedEmployee = await Employee.findOneAndUpdate(
+            { name: oldName }, // Find the employee by oldName
+            { name: newName }, // Update the name to newName
+            { new: true } // Return the updated document
+        );
 
-    // Read the file and update the user's name
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => {
-            if (data.name === oldName) {
-                data.name = newName; // Update the name
-            }
-            results.push(data);
-        })
-        .on('end', () => {
-            // Add the header row
-            const header = 'name\n';
+        if (!updatedEmployee) {
+            return res.status(404).json({ error: 'Employee not found in the employee list' });
+        }
 
-            // Convert updated data back to CSV format
-            const updatedCsv = header + results.map(row => row.name).join('\n');
-
-            // Overwrite the file with updated data
-            fs.writeFile(filePath, updatedCsv, (err) => {
-                if (err) {
-                    return res.status(500).json({ error: 'Failed to update the file', details: err.message });
-                }
-                res.status(200).json({ message: 'User name updated successfully' });
-            });
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message });
-        });
+        res.status(200).json({ message: 'Employee name updated successfully', employee: updatedEmployee });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update employee name', details: err.message });
+    }
 });
 
 
 
 
-// GET route to read all rows from attendance.csv
-router.get('/v1/:fileName', (req, res) => {
-    console.log(req.params.fileName)
-    const filePath = path.join(__dirname, '../files/', req.params.fileName);
-    const results = []
 
-    
-    if (!fs.existsSync(filePath)) {
-        console.log('File not found:', filePath)
-        return res.status(404).send('File not found');
+// GET route to fetch all attendance data for a specific date from MongoDB
+router.get('/v1/:date', async (req, res) => {
+    const { date } = req.params; // Get the date from query parameters
+
+    if (!date) {
+        return res.status(400).json({ error: 'Date is required in the format YYYY-MM-DD' });
     }
 
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => results.push(data))
-        .on('end', () => {
-            res.status(200).json(results)
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message })
-        })
-})
+    try {
+        // Fetch attendance records for the specified date
+        const attendanceRecords = await Attendance.find({ date });
 
+        if (attendanceRecords.length === 0) {
+            return res.status(404).json({ error: 'No attendance records found for the specified date' });
+        }
 
-// GET route to read today's attendance from attendance.csv
-router.get('/v2/today', (req, res) => {
-    const date = new Date();
-    const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-    console.log('Formatted Date:', formattedDate);
-    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
-    const results = [];
-
-    if (!fs.existsSync(filePath)) {
-        console.log('File not found:', filePath);
-        return res.status(404).send('File not found');
+        res.status(200).json(attendanceRecords); // Send the records as a JSON response
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch attendance records', details: err.message });
     }
-
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => results.push(data))
-        .on('end', () => {
-            res.status(200).json(results);
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message });
-        });
 });
 
-// POST route to add a new record to attendance.csv
-router.post('/v1', (req, res) => {
+
+
+// GET route to fetch today's attendance records from MongoDB
+router.get('/v2/today', async (req, res) => {
     const date = new Date();
     const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
+
+    try {
+        // Fetch attendance records for today's date
+        const attendanceRecords = await Attendance.find({ date: formattedDate });
+
+        if (attendanceRecords.length === 0) {
+            return res.status(404).json({ error: 'No attendance records found for today' });
+        }
+
+        res.status(200).json(attendanceRecords); // Send the records as a JSON response
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch attendance records', details: err.message });
+    }
+});
+
+
+
+// POST route to add a new attendance record to the attendance collection in MongoDB
+router.post('/v1', async (req, res) => {
+    const date = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
     const { studentname, option } = req.body;
 
     if (!studentname || !option) {
         return res.status(400).json({ error: 'Both studentname and option (checkin/checkout) are required' });
     }
 
-    // Ensure the file exists before appending
-    fs.access(filePath, fs.constants.F_OK, (err) => {
-        if (err) {
-            // If the file does not exist, create it with a header row
-            const header = 'studentname,checkin,checkout\n';
-            fs.writeFile(filePath, header, (writeErr) => {
-                if (writeErr) {
-                    return res.status(500).json({ error: 'Failed to create the file', details: writeErr.message });
-                }
-                appendRecord(); // Append the record after creating the file
-            });
-        } else {
-            appendRecord(); // Append the record if the file already exists
-        }
-    });
-
-    // Function to append the new record
-    function appendRecord() {
-        const currentTime = new Date().toLocaleTimeString(); // Get the current server time
-
-        // Determine check-in or check-out based on the option
+    try {
+        // Determine check-in or check-out time based on the option
+        const currentTime = new Date().toLocaleTimeString('en-US', { hour12: true }); // Format time in AM/PM
         const checkin = option === 'checkin' ? currentTime : 'N/A';
         const checkout = option === 'checkout' ? currentTime : 'N/A';
 
-        // Create the new record
-        const newRecord = `${studentname},${checkin},${checkout}\n`;
-
-        // Append the record to the file
-        fs.appendFile(filePath, newRecord, (err) => {
-            if (err) {
-                return res.status(500).json({ error: 'Failed to write to the file', details: err.message });
-            }
-            res.status(201).json({ message: 'Record added successfully' });
+        // Create a new attendance record
+        const newAttendance = new Attendance({
+            name: studentname,
+            checkin,
+            checkout,
+            date
         });
+
+        // Save the record to the database
+        await newAttendance.save();
+
+        res.status(201).json({ message: 'Attendance record added successfully', attendance: newAttendance });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to add attendance record', details: err.message });
     }
 });
 
 
-// PUT route to update the check-in time of a record by student name
-router.put('/v1/checkin', (req, res) => {
-    const date = new Date();
-    const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-    console.log('Formatted Date:', formattedDate);
-    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
-    const { studentname } = req.body
+
+
+// PUT route to update the check-in time of a record by student name in the attendance collection
+router.put('/v1/checkin', async (req, res) => {
+    const date = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const { studentname } = req.body;
 
     if (!studentname) {
-        return res.status(400).json({ error: 'Both studentname and newCheckin are required' })
+        return res.status(400).json({ error: 'Student name is required' });
     }
 
-    const checkin = new Date().toLocaleTimeString(); // Get the current server time
-    const results = []
+    try {
+        // Get the current time in AM/PM format
+        const checkin = new Date().toLocaleTimeString('en-US', { hour12: true });
 
-    // Read the file and update the record
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => {
-            if (data.name === studentname) {
-                data.checkin = checkin // Update the check-in time
-            }
-            results.push(data)
-        })
-        .on('end', () => {
-            // Add the header row
-            const header = 'name,checkin,checkout\n';
+        // Find the attendance record for the student on today's date and update the check-in time
+        const updatedAttendance = await Attendance.findOneAndUpdate(
+            { name: studentname, date }, // Find by student name and today's date
+            { checkin }, // Update the check-in time
+            { new: true } // Return the updated document
+        );
 
-            // Convert updated data back to CSV format
-            const updatedCsv =
-            header + results.map(row => `${row.name},${row.checkin},${row.checkout}`).join('\n');
+        if (!updatedAttendance) {
+            return res.status(404).json({ error: 'Attendance record not found for the specified student and date' });
+        }
 
-            // Overwrite the file with updated data
-            fs.writeFile(filePath, updatedCsv, (err) => {
-                if (err) {
-                    return res.status(500).json({ error: 'Failed to update the file', details: err.message })
-                }
-                res.status(200).json({ message: 'Check-in time updated successfully' })
-            })
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message })
-        })
-})
+        res.status(200).json({ message: 'Check-in time updated successfully', attendance: updatedAttendance });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update check-in time', details: err.message });
+    }
+});
 
 
 
-// PUT route to update the checkout time of a record by student name
-router.put('/v1/checkout', (req, res) => {
-    const date = new Date();
-    const formattedDate = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-    console.log('Formatted Date:', formattedDate);
-    const filePath = path.join(__dirname, '../files/', `${formattedDate}.csv`);
-    const { studentname } = req.body
+
+// PUT route to update the checkout time of a record by student name in the attendance collection
+router.put('/v1/checkout', async (req, res) => {
+    const date = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const { studentname } = req.body;
 
     if (!studentname) {
-        return res.status(400).json({ error: 'Both studentname and newCheckout are required' })
+        return res.status(400).json({ error: 'Student name is required' });
     }
 
-    const checkout = new Date().toLocaleTimeString(); // Get the current server time
-    const results = []
+    try {
+        // Get the current time in AM/PM format
+        const checkout = new Date().toLocaleTimeString('en-US', { hour12: true });
 
-    // Read the file and update the record
-    fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => {
-            if (data.name === studentname) {
-                data.checkout = checkout // Update the checkout time
-            }
-            results.push(data)
-        })
-        .on('end', () => {
-            // Add the header row
-            const header = 'name,checkin,checkout\n';
+        // Find the attendance record for the student on today's date and update the checkout time
+        const updatedAttendance = await Attendance.findOneAndUpdate(
+            { name: studentname, date }, // Find by student name and today's date
+            { checkout }, // Update the checkout time
+            { new: true } // Return the updated document
+        );
 
-            // Convert updated data back to CSV format
-            const updatedCsv =
-            header + results.map(row => `${row.name},${row.checkin},${row.checkout}`).join('\n');
- 
+        if (!updatedAttendance) {
+            return res.status(404).json({ error: 'Attendance record not found for the specified student and date' });
+        }
 
-            // Overwrite the file with updated data
-            fs.writeFile(filePath, updatedCsv, (err) => {
-                if (err) {
-                    return res.status(500).json({ error: 'Failed to update the file', details: err.message })
-                }
-                res.status(200).json({ message: 'Checkout time updated successfully' })
-            })
-        })
-        .on('error', (err) => {
-            res.status(500).json({ error: 'Failed to read the file', details: err.message })
-        })
-})
-
+        res.status(200).json({ message: 'Checkout time updated successfully', attendance: updatedAttendance });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update checkout time', details: err.message });
+    }
+});
 
 module.exports = router
