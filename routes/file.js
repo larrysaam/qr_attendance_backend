@@ -3,8 +3,10 @@ const multer = require('multer')
 const fs = require('fs')
 const path = require('path')
 const csv = require('csv-parser')
+const mongoose = require('mongoose')
 const Employee = require('../model/employeeListModel'); // Import the Employee model
 const Attendance = require('../model/attendanceModel');
+
 
 const router = express.Router()
 
